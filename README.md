@@ -1,19 +1,127 @@
-[![Build Status](https://travis-ci.org/jetiny/rollup-plugin-re.svg?branch=master)](https://travis-ci.org/jetiny/rollup-plugin-re)
+<!--[![Build Status](https://travis-ci.org/jetiny/rollup-plugin-re.svg?branch=master)](https://travis-ci.org/jetiny/rollup-plugin-re)-->
 
-# rollup-plugin-re
+# rollup-plugin-ifdef
 
-Power rollup content transform plugin.
+A fork of `rollup-plugin-re` that supports conditional building.
 
 ## Installation
-
+…
+<!--
 ```
-npm install --save-dev rollup-plugin-re
+npm install --save-dev rollup-plugin-ifdef
 ```
-
+-->
 ## Usage
+
+### #if…#end / #if…#else…#eend addon
+
+If you didn't use original plugin, please read [the following sections](#original-description) before.
+
+This fork adds more flexible conditional building features. It allows `if`-`else` constructs and nested `if`s.
+It also support conditions in raw sources pre-built state, so you can use conditions while debug you app on local server without build.
+
+To make this work, define somewhere (e.g. in a separate module) your own `def(d)` function like:
+```js
+const DEFINES = {
+  ONE: true,
+  TWO: false,
+};
+
+function def(d) {
+  return DEFINES[d];
+}
+```
+
+Then use the following constructs in your conditional code:
+```js
+import {def} from "./mydef.js";
+
+if (def('ONE')) { // #if
+  console.log(1);
+} // #end ONE
+
+if (def('TWO')) { // #if
+  console.log(2);
+} // #end TWO
+```
+
+So when uncompiled it works just as normal `if`s.
+
+The result of processing using this plugin (if you pass the same `define` option) will be:
+```js
+{
+  console.log(1);
+}
+```
+
+* * *
+
+`if`-`else` example:
+```js
+if (def('ONE')) { // #if
+  console.info('IF branch');
+} else {  // #else ONE
+  console.info('ELSE branch');
+}         // #eend ONE
+```
+
+transforms to:
+```js
+{
+  console.info('IF branch');
+}
+```
+
+* * *
+
+nested ifdefs are also allowed:
+```js
+if (def('ONE')) { // #if
+  console.log('one');
+
+  if (def('TWO')) { // #if
+    console.log('two');
+  } // #end TWO
+
+} // #end ONE
+
+
+if (def('TWO')) { // #if
+  console.log('222');
+
+  if (def('ONE')) { // #if
+    console.log('111');
+  } // #end ONE
+
+} // #end TWO
+```
+
+transforms to:
+```js
+{
+  console.log('one');
+}
+```
+
+But you can't use the same define nested (e.g. `if (def('ONE')) { … if (def('ONE')… }`), it will throw an error.
+
+* * *
+
+The following special comments are detected:
+1. `if (def('SOME')) {   // #if`: start of `SOME` section, `'` and `{` on the same line required for detection;
+2. `}   // #end SOME`: put comment on the same line with `}` and put definention name after `#end`;
+3. `} else { // #else SOME`: `}`, `else`, `{` and comment are on the same line, definition name (`SOME`) included;
+4. `}   // #eend SOME`: same as `#end`, but for `if`-`else` we use `#eend`.
+
+* * *
+
+The original `// #ifdef … // #endif` syntax also works.
+
+
+### Original description
 ```js
 import { rollup } from 'rollup'
-import replace from 'rollup-plugin-re'
+import replace from 'rollup-plugin-ifdef'
 import commonjs from 'rollup-plugin-commonjs'
 rollup({
   entry: 'main.js',
