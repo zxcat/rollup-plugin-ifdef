@@ -1,11 +1,17 @@
 'use strict'
 
 import test from 'ava'
-import {rollup} from 'rollup'
+import { rollup } from 'rollup'
 import replace from '..'
 
+async function getCode (bundle) {
+  const { output } = await bundle.generate({})
+  const { code } = output[0]
+  return code
+}
+
 test('replaces strings', assert => rollup({
-  entry: 'fixtures/simple.js',
+  input: 'test/fixtures/simple.js',
   plugins: [
     replace({
       patterns: [
@@ -34,8 +40,7 @@ test('replaces strings', assert => rollup({
       ]
     })
   ]
-}).then((bundle) => {
-  const code = bundle.generate().code
+}).then(getCode).then((code) => {
   assert.true(code.indexOf("'production' === 'production'") !== -1)
   assert.true(code.indexOf(', )') === -1)
   assert.true(!!~~code.indexOf('helloworld'))
@@ -44,23 +49,22 @@ test('replaces strings', assert => rollup({
 }))
 
 test('replaces with text', assert => rollup({
-  entry: 'fixtures/simple.js',
+  input: 'test/fixtures/simple.js',
   plugins: [
     replace({
       patterns: [
         {
-          text: `exports = 'xxx'`
+          text: 'exports = \'xxx\''
         }
       ]
     })
   ]
-}).then((bundle) => {
-  const code = bundle.generate().code
+}).then(getCode).then((code) => {
   assert.true(code.indexOf('xxx') !== -1)
 }))
 
 test('replaces with file', assert => rollup({
-  entry: 'fixtures/simple.js',
+  input: 'test/fixtures/simple.js',
   plugins: [
     replace({
       patterns: [
@@ -70,13 +74,12 @@ test('replaces with file', assert => rollup({
       ]
     })
   ]
-}).then((bundle) => {
-  const code = bundle.generate().code
+}).then(getCode).then((code) => {
   assert.true(code.indexOf('fileContent') !== -1)
 }))
 
 test('defines', assert => rollup({
-  entry: 'fixtures/define.js',
+  input: 'test/fixtures/define.js',
   plugins: [
     replace({
       defines: {
@@ -85,8 +88,7 @@ test('defines', assert => rollup({
       }
     })
   ]
-}).then((bundle) => {
-  const code = bundle.generate().code
+}).then(getCode).then((code) => {
   assert.true(code.indexOf('!Skip!') !== -1)
   assert.true(code.indexOf('!Skip2!') !== -1)
   assert.true(code.indexOf('!HelloWorld!') !== -1)
@@ -96,7 +98,7 @@ test('defines', assert => rollup({
 }))
 
 test('replaces', assert => rollup({
-  entry: 'fixtures/define.js',
+  input: 'test/fixtures/define.js',
   plugins: [
     replace({
       replaces: {
@@ -105,38 +107,36 @@ test('replaces', assert => rollup({
       }
     })
   ]
-}).then((bundle) => {
-  const code = bundle.generate().code
+}).then(getCode).then((code) => {
   assert.true(code.indexOf('IS_NO_SKIP') !== -1)
   assert.true(code.indexOf('IS_NO_BYE') !== -1)
   assert.true(code.indexOf('IS_SKIP') === -1)
   assert.true(code.indexOf('IS_BYE') === -1)
 }))
 
-test('replaces with file', assert => rollup({
-  entry: 'fixtures/simple.js',
+test('replaces with file #2', assert => rollup({
+  input: 'test/fixtures/simple.js',
   plugins: [
     replace({
       patterns: [
         {
           file: './file.js',
           transform (code) {
-            return code + `\ndebugger;`
+            return code + '\ndebugger;'
           }
         }
       ]
     })
   ]
-}).then((bundle) => {
-  const code = bundle.generate().code
+}).then(getCode).then((code) => {
   assert.true(code.indexOf('fileContent') !== -1)
   assert.true(code.indexOf('debugger;') !== -1)
 }))
 
 test('verbose', assert => {
-  let ids = []
+  const ids = []
   return rollup({
-    entry: 'fixtures/simple.js',
+    input: 'test/fixtures/simple.js',
     plugins: [
       replace({
         verbose (it) {
@@ -148,4 +148,3 @@ test('verbose', assert => {
     assert.true(ids.length === 1)
   })
 })
-

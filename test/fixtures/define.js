@@ -1,6 +1,6 @@
 
 // #if IS_HELLO
-  console.log('!HelloWorld!')
+console.log('!HelloWorld!')
 // #endif
 
 // #if IS_SKIP
@@ -10,7 +10,7 @@ console.log('!Skip!')
 // #if IS_BYE
 // bye
 
-  console.log('!GoodBye!')
+console.log('!GoodBye!')
 
 // bye
 // #endif

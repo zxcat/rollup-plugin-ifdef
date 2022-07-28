@@ -1,26 +1,30 @@
-import buble from 'rollup-plugin-buble'
+import buble from '@rollup/plugin-buble'
 
 const pack = require('./package.json')
 const YEAR = new Date().getFullYear()
 
 export default {
-  entry: 'src/index.js',
-  dest: 'dist/rollup-plugin-re.cjs.js',
+  input: 'src/index.js',
+  output: {
+    file: 'dist/rollup-plugin-ifdef.cjs.js',
+    banner () {
+      return `/*!
+ * ${pack.name} v${pack.version}
+ * (c) ${YEAR} ${pack.author.name}
+ * Release under the ${pack.license} License.
+ */`
+    }
+  },
   plugins: [
     buble()
   ],
-  banner   () {
-    return `/*!
- * ${pack.name} v${pack.version}
- * (c) ${YEAR} ${pack.author.name} ${pack.author.email}
- * Release under the ${pack.license} License.
- */`
-  },
 
   // Cleaner console
-  onwarn (msg) {
-    if (msg && msg.startsWith('Treating')) {
+  onwarn (warning, warn) {
+    const msg = warning.message
+    if (msg && msg.startsWith && msg.startsWith('Treating')) {
       return
     }
+    warn(warning)
   }
 }

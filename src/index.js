@@ -1,6 +1,6 @@
 import { createFilter } from 'rollup-pluginutils'
 import MagicString from 'magic-string'
-import {resolve} from 'path'
+import { resolve } from 'path'
 import fs from 'fs'
 
 /*
@@ -12,7 +12,7 @@ import fs from 'fs'
  */
 function parseDefines (defines, patterns) {
   if (isObject(defines)) {
-    for (let defineName in defines) {
+    for (const defineName in defines) {
       if (!defines[defineName]) { // remove define blocks
         patterns.push({
           test: makeDefineRegexp(defineName),
@@ -32,7 +32,7 @@ function parseDefines (defines, patterns) {
 */
 function parseReplaces (replaces, patterns) {
   if (isObject(replaces)) {
-    for (let replaceName in replaces) {
+    for (const replaceName in replaces) {
       patterns.push({
         test: replaceName,
         replace: replaces[replaceName]
@@ -91,11 +91,11 @@ function parsePatterns (patterns, contents) {
     // content by file
     if (isString(it.file)) {
       it.replaceContent = (res) => {
-        let file = resolve(res.id, '../', it.file)
+        const file = resolve(res.id, '../', it.file)
         try {
           res.content = fs.readFileSync(file).toString()
         } catch (err) {
-          throw new Error('[rollup-plugin-re] can not readFile: ' + file)
+          throw new Error('[rollup-plugin-ifdef] can not readFile: ' + file)
         }
       }
     }
@@ -121,8 +121,8 @@ function verbose (opts, result, id) {
 
 export default function replace (options = {}) {
   const filter = createFilter(options.include, options.exclude)
-  let contents = []
-  let patterns = options.patterns || (options.patterns = [])
+  const contents = []
+  const patterns = options.patterns || (options.patterns = [])
   parseDefines(options.defines, patterns)
   parseReplaces(options.replaces, patterns)
   parsePatterns(patterns, contents)
@@ -148,7 +148,7 @@ export default function replace (options = {}) {
         }
         // replace content
         if (pattern.replaceContent) {
-          let res = {
+          const res = {
             id,
             code,
             magicString
@@ -162,7 +162,7 @@ export default function replace (options = {}) {
         }
         // transform
         if (isFunction(pattern.transform)) {
-          let newCode = pattern.transform(code, id)
+          const newCode = pattern.transform(code, id)
           if (isString(newCode) && newCode !== code) {
             hasReplacements = true
             magicString = new MagicString(newCode)
@@ -203,14 +203,14 @@ export default function replace (options = {}) {
               str = pattern.replace.apply(null, match)
             }
             if (!isString(str)) {
-              throw new Error('[rollup-plugin-re] replace function should return a string')
+              throw new Error('[rollup-plugin-ifdef] replace function should return a string')
             }
             magicString.overwrite(start, end, str)
             match = pattern.test.global ? pattern.test.exec(code) : null
           }
         } else if (pattern.testIsString) {
           let start, end
-          let len = pattern.test.length
+          const len = pattern.test.length
           let pos = code.indexOf(pattern.test)
           while (pos !== -1) {
             hasReplacements = true
@@ -219,9 +219,9 @@ export default function replace (options = {}) {
             if (pattern.replaceIsString) {
               magicString.overwrite(start, end, pattern.replace)
             } else if (pattern.replaceIsFunction) {
-              let str = pattern.replace(id)
+              const str = pattern.replace(id)
               if (!isString(str)) {
-                throw new Error('[rollup-plugin-re] replace function should return a string')
+                throw new Error('[rollup-plugin-ifdef] replace function should return a string')
               }
               magicString.overwrite(start, end, str)
             }
@@ -234,7 +234,7 @@ export default function replace (options = {}) {
         return
       }
       verbose(options, 'replace', id)
-      let result = { code: magicString.toString() }
+      const result = { code: magicString.toString() }
       if (options.sourceMap !== false) {
         result.map = magicString.generateMap({ hires: true })
       }
@@ -243,7 +243,7 @@ export default function replace (options = {}) {
   }
 }
 
-let source = /\/\/\s#if\sIS_DEFINE(.*)([\s\S]*?)\/\/\s#endif/g.source
+const source = /\/\/\s#if\sIS_DEFINE(.*)([\s\S]*?)\/\/\s#endif/g.source
 
 function makeDefineRegexp (text) {
   return new RegExp(source.replace('IS_DEFINE', text), 'g')
