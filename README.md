@@ -117,6 +117,10 @@ The following special comments are detected:
 
 The original `// #ifdef … // #endif` syntax also works.
 
+### Fork caveats
+If you use **nested conditions** and create `map`-file using MagicString (not sure it's possible now), MagicString will produce bad map, 
+because nested conditions require several MagicString passes. and map uses only the last pass source code, which is already pre-processed.
+
 
 ### Original description
 ```js
