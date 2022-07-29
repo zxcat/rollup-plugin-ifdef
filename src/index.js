@@ -137,7 +137,7 @@ function verbose (opts, result, id) {
 
 export default function replace (options = {}) {
   const filter = createFilter(options.include, options.exclude)
-  let contents = []
+  const contents = []
   const patterns = options.patterns || (options.patterns = [])
   parseDefines(options.defines, patterns)
   parseReplaces(options.replaces, patterns)
@@ -153,14 +153,19 @@ export default function replace (options = {}) {
         verbose(options, 'ignore', id)
         return
       }
+      const MAX_PASSES = 10
       let result
-      let retries = 0
-      let retryPatterns = []
+      let pass = 0
+      let retry
+      // To process nested conditions we should process outer first, so delay regex replace
+      let regexToDo
       do {
-        if (retries) {
-          verbose(options, 'pass', retries + 1)
+        retry = false
+        regexToDo = []
+        if (pass) {
+          verbose(options, 'pass', pass + 1)
         }
-        let hasReplacements = false
+        const hasReplacements = { c: 0, t: 0, r: 0, s: 0 } // detailed info, which replacement types used
         let magicString = new MagicString(code)
         contents.forEach((pattern) => {
           if (!pattern.filter(id)) {
@@ -178,7 +183,7 @@ export default function replace (options = {}) {
             }
             pattern.replaceContent(res)
             if (isString(res.content) && res.content !== code) {
-              hasReplacements = true
+              hasReplacements.c++
               magicString = new MagicString(res.content)
               code = res.content
             }
@@ -187,7 +192,7 @@ export default function replace (options = {}) {
           if (isFunction(pattern.transform)) {
             const newCode = pattern.transform(code, id)
             if (isString(newCode) && newCode !== code) {
-              hasReplacements = true
+              hasReplacements.t++
               magicString = new MagicString(newCode)
               code = newCode
             }
@@ -197,7 +202,7 @@ export default function replace (options = {}) {
             let match = pattern.test.exec(code)
             let start, end
             while (match) {
-              hasReplacements = true
+              hasReplacements.r++
               start = match.index
               end = start + match[0].length
               let str
@@ -228,15 +233,7 @@ export default function replace (options = {}) {
               if (!isString(str)) {
                 throw new Error('[rollup-plugin-ifdef] replace function should return a string')
               }
-              try {
-                magicString.overwrite(start, end, str)
-              } catch (e) {
-                if ((e + '').indexOf('Error: Cannot split a chunk that has already been edited') >= 0) {
-                  retryPatterns.push(pattern)
-                } else {
-                  throw (e)
-                }
-              }
+              regexToDo.push({ start, end, str })
               match = pattern.test.global ? pattern.test.exec(code) : null
             }
           } else if (pattern.testIsString) {
@@ -244,7 +241,7 @@ export default function replace (options = {}) {
             const len = pattern.test.length
             let pos = code.indexOf(pattern.test)
             while (pos !== -1) {
-              hasReplacements = true
+              hasReplacements.s++
               start = pos
               end = start + len
               if (pattern.replaceIsString) {
@@ -261,10 +258,31 @@ export default function replace (options = {}) {
           }
         })
 
-        if (!hasReplacements) {
+        const { c, t, r, s } = hasReplacements
+        if (!(c + t + r + s)) {
           return
         }
-        verbose(options, 'replace', id)
+        if (regexToDo.length) {
+          // sort by left side
+          regexToDo.sort((a, b) => { return a.start - b.start })
+
+          // remove inner (nested) matches to process them on the next pass
+          let prev
+          regexToDo.forEach(r => {
+            const { start, end, str } = r
+            if (prev) {
+              const inside = start > prev.start && end < prev.end
+              if (inside) {
+                retry = true
+                return
+              }
+            }
+            prev = r
+            magicString.overwrite(start, end, str)
+          })
+        }
+
+        verbose(options, `replaces: c:${c}, t:${t}, r:${r}, s:${s}`, id)
         result = { code: magicString.toString() }
 
         if (options.sourceMap !== false) {
@@ -272,9 +290,7 @@ export default function replace (options = {}) {
         }
 
         code = result.code
-        contents = retryPatterns
-        retryPatterns = []
-      } while (retries++ < 10 && contents.length)
+      } while (pass++ < MAX_PASSES && retry)
       return result
     }
   }

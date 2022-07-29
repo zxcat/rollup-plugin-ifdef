@@ -148,3 +148,33 @@ test('verbose', assert => {
     assert.true(ids.length === 1)
   })
 })
+
+test('#if#else', assert => rollup({
+  input: 'test/fixtures/ifelse.js',
+  plugins: [
+    replace({
+      defines: {
+        YES: true,
+        NO: false,
+        ONE: false,
+        TWO: true
+      }
+    })
+  ]
+}).then(getCode).then((code) => {
+  assert.true(code.indexOf('!no!') === -1)
+  assert.true(code.indexOf('!yes!') !== -1)
+  assert.true(code.indexOf('!no!') === -1)
+  assert.true(code.indexOf('!yes2!') !== -1)
+  assert.true(code.indexOf('!not yes2!') === -1)
+  assert.true(code.indexOf('!no2!') === -1)
+  assert.true(code.indexOf('!not no2!') !== -1)
+  assert.true(code.indexOf('!one!') === -1)
+  assert.true(code.indexOf('!two!') === -1)
+  assert.true(code.indexOf('!two2!') !== -1)
+  assert.true(code.indexOf('!one2!') === -1)
+  assert.true(code.indexOf('!yes3!') !== -1)
+  assert.true(code.indexOf('!two3!') !== -1)
+  assert.true(code.indexOf('!one3!') === -1)
+  assert.true(code.indexOf('!three!') !== -1)
+}))
