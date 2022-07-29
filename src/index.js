@@ -259,7 +259,7 @@ export default function replace (options = {}) {
         })
 
         const { c, t, r, s } = hasReplacements
-        if (!(c + t + r + s)) {
+        if (!(pass + c + t + r + s)) {
           return
         }
         if (regexToDo.length) {

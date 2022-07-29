@@ -276,7 +276,7 @@ function replace (options) {
         var t = hasReplacements.t;
         var r = hasReplacements.r;
         var s = hasReplacements.s;
-        if (!(c + t + r + s)) {
+        if (!(pass + c + t + r + s)) {
           return {}
         }
         if (regexToDo.length) {
