@@ -13,12 +13,28 @@ import fs from 'fs'
 function parseDefines (defines, patterns) {
   if (isObject(defines)) {
     for (const defineName in defines) {
-      if (!defines[defineName]) { // remove define blocks
+      const pass = defines[defineName]
+      if (pass) {
         patterns.push({
-          test: makeDefineRegexp(defineName),
-          replace: ''
+          test: makeIfDefRegexp(defineName),
+          replace: '{$1}'
         })
+      } else { // remove define blocks
+        patterns.push(
+          {
+            test: makeIfDefRegexp(defineName),
+            replace: ''
+          },
+          {
+            test: makeDefineRegexp(defineName),
+            replace: ''
+          }
+        )
       }
+      patterns.push({
+        test: makeIfElseRegexp(defineName),
+        replace: pass ? '{$1}' : '{$2}'
+      })
     }
   }
 }
@@ -121,7 +137,7 @@ function verbose (opts, result, id) {
 
 export default function replace (options = {}) {
   const filter = createFilter(options.include, options.exclude)
-  const contents = []
+  let contents = []
   const patterns = options.patterns || (options.patterns = [])
   parseDefines(options.defines, patterns)
   parseReplaces(options.replaces, patterns)
@@ -137,113 +153,143 @@ export default function replace (options = {}) {
         verbose(options, 'ignore', id)
         return
       }
-      let hasReplacements = false
-      let magicString = new MagicString(code)
-      contents.forEach((pattern) => {
-        if (!pattern.filter(id)) {
-          return
+      let result
+      let retries = 0
+      let retryPatterns = []
+      do {
+        if (retries) {
+          verbose(options, 'pass', retries + 1)
         }
-        if (pattern.matcher && !pattern.matcher(id)) {
-          return
-        }
-        // replace content
-        if (pattern.replaceContent) {
-          const res = {
-            id,
-            code,
-            magicString
+        let hasReplacements = false
+        let magicString = new MagicString(code)
+        contents.forEach((pattern) => {
+          if (!pattern.filter(id)) {
+            return
           }
-          pattern.replaceContent(res)
-          if (isString(res.content) && res.content !== code) {
-            hasReplacements = true
-            magicString = new MagicString(res.content)
-            code = res.content
+          if (pattern.matcher && !pattern.matcher(id)) {
+            return
           }
-        }
-        // transform
-        if (isFunction(pattern.transform)) {
-          const newCode = pattern.transform(code, id)
-          if (isString(newCode) && newCode !== code) {
-            hasReplacements = true
-            magicString = new MagicString(newCode)
-            code = newCode
+          // replace content
+          if (pattern.replaceContent) {
+            const res = {
+              id,
+              code,
+              magicString
+            }
+            pattern.replaceContent(res)
+            if (isString(res.content) && res.content !== code) {
+              hasReplacements = true
+              magicString = new MagicString(res.content)
+              code = res.content
+            }
           }
-        }
-        // test & replace
-        if (pattern.testIsRegexp) {
-          let match = pattern.test.exec(code)
-          let start, end
-          while (match) {
-            hasReplacements = true
-            start = match.index
-            end = start + match[0].length
-            let str
-            if (pattern.replaceIsString) {
+          // transform
+          if (isFunction(pattern.transform)) {
+            const newCode = pattern.transform(code, id)
+            if (isString(newCode) && newCode !== code) {
+              hasReplacements = true
+              magicString = new MagicString(newCode)
+              code = newCode
+            }
+          }
+          // test & replace
+          if (pattern.testIsRegexp) {
+            let match = pattern.test.exec(code)
+            let start, end
+            while (match) {
+              hasReplacements = true
+              start = match.index
+              end = start + match[0].length
+              let str
+              if (pattern.replaceIsString) {
               // fill capture groups
-              str = pattern.replace.replace(/\$\$|\$&|\$`|\$'|\$\d+/g, m => {
-                if (m === '$$') {
-                  return '$'
-                }
-                if (m === '$&') {
-                  return match[0]
-                }
-                if (m === '$`') {
-                  return code.slice(0, start)
-                }
-                if (m === "$'") {
-                  return code.slice(end)
-                }
-                const n = +m.slice(1)
-                if (n >= 1 && n < match.length) {
-                  return match[n] || ''
-                }
-                return m
-              })
-            } else {
-              str = pattern.replace.apply(null, match)
-            }
-            if (!isString(str)) {
-              throw new Error('[rollup-plugin-ifdef] replace function should return a string')
-            }
-            magicString.overwrite(start, end, str)
-            match = pattern.test.global ? pattern.test.exec(code) : null
-          }
-        } else if (pattern.testIsString) {
-          let start, end
-          const len = pattern.test.length
-          let pos = code.indexOf(pattern.test)
-          while (pos !== -1) {
-            hasReplacements = true
-            start = pos
-            end = start + len
-            if (pattern.replaceIsString) {
-              magicString.overwrite(start, end, pattern.replace)
-            } else if (pattern.replaceIsFunction) {
-              const str = pattern.replace(id)
+                str = pattern.replace.replace(/\$\$|\$&|\$`|\$'|\$\d+/g, m => {
+                  if (m === '$$') {
+                    return '$'
+                  }
+                  if (m === '$&') {
+                    return match[0]
+                  }
+                  if (m === '$`') {
+                    return code.slice(0, start)
+                  }
+                  if (m === "$'") {
+                    return code.slice(end)
+                  }
+                  const n = +m.slice(1)
+                  if (n >= 1 && n < match.length) {
+                    return match[n] || ''
+                  }
+                  return m
+                })
+              } else {
+                str = pattern.replace.apply(null, match)
+              }
               if (!isString(str)) {
                 throw new Error('[rollup-plugin-ifdef] replace function should return a string')
               }
-              magicString.overwrite(start, end, str)
+              try {
+                magicString.overwrite(start, end, str)
+              } catch (e) {
+                if ((e + '').indexOf('Error: Cannot split a chunk that has already been edited') >= 0) {
+                  retryPatterns.push(pattern)
+                } else {
+                  throw (e)
+                }
+              }
+              match = pattern.test.global ? pattern.test.exec(code) : null
             }
-            pos = code.indexOf(pattern.test, pos + 1)
+          } else if (pattern.testIsString) {
+            let start, end
+            const len = pattern.test.length
+            let pos = code.indexOf(pattern.test)
+            while (pos !== -1) {
+              hasReplacements = true
+              start = pos
+              end = start + len
+              if (pattern.replaceIsString) {
+                magicString.overwrite(start, end, pattern.replace)
+              } else if (pattern.replaceIsFunction) {
+                const str = pattern.replace(id)
+                if (!isString(str)) {
+                  throw new Error('[rollup-plugin-ifdef] replace function should return a string')
+                }
+                magicString.overwrite(start, end, str)
+              }
+              pos = code.indexOf(pattern.test, pos + 1)
+            }
           }
-        }
-      })
+        })
 
-      if (!hasReplacements) {
-        return
-      }
-      verbose(options, 'replace', id)
-      const result = { code: magicString.toString() }
-      if (options.sourceMap !== false) {
-        result.map = magicString.generateMap({ hires: true })
-      }
+        if (!hasReplacements) {
+          return
+        }
+        verbose(options, 'replace', id)
+        result = { code: magicString.toString() }
+
+        if (options.sourceMap !== false) {
+          result.map = magicString.generateMap({ hires: true })
+        }
+
+        code = result.code
+        contents = retryPatterns
+        retryPatterns = []
+      } while (retries++ < 10 && contents.length)
       return result
     }
   }
 }
 
 const source = /\/\/\s#if\sIS_DEFINE(.*)([\s\S]*?)\/\/\s#endif/g.source
+const ifdef = /if\s*\(def\('IS_DEF'\)\)\s*\{\s*\/\/\s#if[^\n]*\n((?:(?!def\('IS_DEF'\))[\s\S])*)\}\s*\/\/\s#end\sIS_DEF/.source
+const ifelse = /if\s*\(def\('IS_DEF'\)\)\s*\{\s*\/\/\s#if[^\n]*\n((?:(?!def\('IS_DEF'\))[\s\S])*)\}\s*else\s*\{\s*\/\/\s#else\sIS_DEF[^\n]*\n((?:(?!def\('IS_DEF'\))[\s\S])*)\}\s*\/\/\s#eend\sIS_DEF/.source
+
+function makeIfDefRegexp (text) {
+  return new RegExp(ifdef.replace(/IS_DEF/g, text), 'g')
+}
+function makeIfElseRegexp (text) {
+  return new RegExp(ifelse.replace(/IS_DEF/g, text), 'g')
+}
 
 function makeDefineRegexp (text) {
   return new RegExp(source.replace('IS_DEFINE', text), 'g')
