@@ -143,7 +143,7 @@ export default function replace (options = {}) {
   parseReplaces(options.replaces, patterns)
   parsePatterns(patterns, contents)
   return {
-    name: 're',
+    name: 'ifdef',
     transform (code, id) {
       if (!filter(id)) {
         verbose(options, 'exclude', id)
